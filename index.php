@@ -36,7 +36,7 @@
 
         <div class="intro">
             <h2>Calcule os materiais da sua laje</h2>
-            <p>Informe as medidas do vao para saber a quantidade de trilhos, isopor, tela e malha.</p>
+            <p>Adicione um ou mais comodos com suas dimensoes e baixe o orcamento completo em PDF.</p>
         </div>
 
         <?php
@@ -56,47 +56,89 @@
         ];
 
         // ── Valores do formulario ──
-        $comprimento = isset($_POST['comprimento']) ? floatval($_POST['comprimento']) : 0;
-        $largura = isset($_POST['largura']) ? floatval($_POST['largura']) : 0;
         $tela_sel = isset($_POST['tela']) ? $_POST['tela'] : 'Q138';
         $malha_sel = isset($_POST['malha']) ? $_POST['malha'] : 'LEVE';
         $enchimento = (isset($_POST['enchimento']) && $_POST['enchimento'] === 'tijolo') ? 'tijolo' : 'isopor';
         $usar_tela = isset($_POST['usar_tela']);
         $usar_malha = isset($_POST['usar_malha']);
-        $calculado = isset($_POST['calcular']) && $comprimento > 0 && $largura > 0;
+        $projeto_nome = isset($_POST['projeto_nome']) ? trim($_POST['projeto_nome']) : '';
+        $cliente_nome = isset($_POST['cliente_nome']) ? trim($_POST['cliente_nome']) : '';
+
+        // Cômodos (array)
+        $rooms_input = [];
+        if (isset($_POST['rooms']) && is_array($_POST['rooms'])) {
+            foreach ($_POST['rooms'] as $r) {
+                $nome = isset($r['nome']) ? trim($r['nome']) : '';
+                $larg = isset($r['largura']) ? floatval($r['largura']) : 0;
+                $comp = isset($r['comprimento']) ? floatval($r['comprimento']) : 0;
+                if ($larg > 0 && $comp > 0) {
+                    $rooms_input[] = ['nome' => $nome, 'largura' => $larg, 'comprimento' => $comp];
+                }
+            }
+        }
+        $calculado = isset($_POST['calcular']) && count($rooms_input) > 0;
 
         if ($calculado) {
-            $maior = max($comprimento, $largura);
-            $menor = min($comprimento, $largura);
-            $comprimento_calc = $maior;
-            $largura_calc = $menor;
-            $area = $largura_calc * $comprimento_calc;
+            // Calcula por cômodo
+            $rooms = [];
+            $total_area = 0;
+            $total_trilhos = 0;
+            $total_enchimento = 0;
+            $total_peso = 0;
+            foreach ($rooms_input as $idx => $r) {
+                $maior = max($r['largura'], $r['comprimento']);
+                $menor = min($r['largura'], $r['comprimento']);
+                $area_r = $maior * $menor;
+                $trilhos_r = ceil($maior / 0.43);
+                if ($enchimento === 'tijolo') {
+                    $ench_r = ceil($area_r * 12);
+                    $peso_r = $area_r * 60;
+                } else {
+                    $ench_r = ceil($area_r * 2.3);
+                    $peso_r = $area_r * 18;
+                }
+                $rooms[] = [
+                    'nome' => $r['nome'] !== '' ? $r['nome'] : 'Comodo ' . ($idx + 1),
+                    'largura' => $menor,
+                    'comprimento' => $maior,
+                    'area' => $area_r,
+                    'trilhos' => $trilhos_r,
+                    'enchimento' => $ench_r,
+                    'peso' => $peso_r,
+                ];
+                $total_area += $area_r;
+                $total_trilhos += $trilhos_r;
+                $total_enchimento += $ench_r;
+                $total_peso += $peso_r;
+            }
 
-            // Trilhos
-            $qtd_trilhos = ceil($comprimento_calc / 0.43);
+            // Aliases para o restante do código
+            $area = $total_area;
+            $qtd_trilhos = $total_trilhos;
+            $qtd_enchimento = $total_enchimento;
+            $peso_enchimento = $total_peso;
+            $qtd_isopor = $total_enchimento;
 
-            // Enchimento (Isopor ou Tijolo Ceramico)
             if ($enchimento === 'tijolo') {
-                $qtd_enchimento = ceil($area * 12);
-                $peso_enchimento = $area * 60;
                 $nome_enchimento = 'Tijolo Ceramico';
                 $unidade_enchimento = 'tijolos';
                 $fator_enchimento = 12;
                 $peso_m2_enchimento = 60;
             } else {
-                $qtd_enchimento = ceil($area * 2.3);
-                $peso_enchimento = $area * 18;
                 $nome_enchimento = 'Isopor (EPS)';
                 $unidade_enchimento = 'placas';
                 $fator_enchimento = 2.3;
                 $peso_m2_enchimento = 18;
             }
-            $qtd_isopor = $qtd_enchimento;
+
+            // Para visualização: primeiro cômodo
+            $comprimento_calc = $rooms[0]['comprimento'];
+            $largura_calc = $rooms[0]['largura'];
 
             // Area da malha POP (todas sao 2x3 = 6m2)
             $area_malha_complemento = 6;
 
-            // Tela - apenas se marcado
+            // Tela - apenas se marcado (sobre area TOTAL)
             if ($usar_tela) {
                 $tela_info = $telas[$tela_sel];
                 $area_tela = $tela_info['larg'] * $tela_info['comp'];
@@ -164,34 +206,67 @@
                             <line x1="8" y1="18" x2="16" y2="18"/>
                         </svg>
                     </div>
-                    <h3>Medidas do Vao</h3>
+                    <h3>Comodos do Projeto</h3>
                 </div>
 
                 <form id="calculatorForm" method="post" action="">
                     <div class="form-body">
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="largura">Largura</label>
-                                <div class="input-wrapper">
-                                    <input type="number" id="largura" name="largura" step="0.01" min="0.01"
-                                           placeholder="6.00"
-                                           value="<?php echo $largura > 0 ? htmlspecialchars($_POST['largura']) : ''; ?>"
-                                           required>
-                                    <span class="input-suffix">m</span>
-                                </div>
+                                <label for="projeto_nome">Nome do Projeto <small style="font-weight:400; color:#888;">(opcional)</small></label>
+                                <input type="text" id="projeto_nome" name="projeto_nome" placeholder="Ex: Casa do Joao"
+                                       value="<?php echo htmlspecialchars($projeto_nome); ?>">
                             </div>
                             <div class="form-group">
-                                <label for="comprimento">Comprimento</label>
-                                <div class="input-wrapper">
-                                    <input type="number" id="comprimento" name="comprimento" step="0.01" min="0.01"
-                                           placeholder="10.00"
-                                           value="<?php echo $comprimento > 0 ? htmlspecialchars($_POST['comprimento']) : ''; ?>"
-                                           required>
-                                    <span class="input-suffix">m</span>
-                                </div>
+                                <label for="cliente_nome">Cliente <small style="font-weight:400; color:#888;">(opcional)</small></label>
+                                <input type="text" id="cliente_nome" name="cliente_nome" placeholder="Ex: Joao Silva"
+                                       value="<?php echo htmlspecialchars($cliente_nome); ?>">
                             </div>
                         </div>
-                        <small class="form-hint">O sistema identifica automaticamente o maior lado como comprimento dos trilhos.</small>
+
+                        <div id="rooms-container">
+                            <?php
+                            $rooms_to_render = !empty($rooms_input) ? $rooms_input : [['nome' => '', 'largura' => '', 'comprimento' => '']];
+                            foreach ($rooms_to_render as $i => $r):
+                            ?>
+                            <div class="room-row" data-room-index="<?php echo $i; ?>">
+                                <div class="room-row-header">
+                                    <span class="room-number">Comodo <?php echo $i + 1; ?></span>
+                                    <button type="button" class="room-remove" title="Remover">&times;</button>
+                                </div>
+                                <div class="room-row-fields">
+                                    <div class="form-group">
+                                        <label>Nome <small style="font-weight:400; color:#888;">(opcional)</small></label>
+                                        <input type="text" name="rooms[<?php echo $i; ?>][nome]" placeholder="Ex: Sala"
+                                               value="<?php echo htmlspecialchars($r['nome']); ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Largura</label>
+                                        <div class="input-wrapper">
+                                            <input type="number" name="rooms[<?php echo $i; ?>][largura]" step="0.01" min="0.01"
+                                                   placeholder="6.00"
+                                                   value="<?php echo htmlspecialchars($r['largura']); ?>" required>
+                                            <span class="input-suffix">m</span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Comprimento</label>
+                                        <div class="input-wrapper">
+                                            <input type="number" name="rooms[<?php echo $i; ?>][comprimento]" step="0.01" min="0.01"
+                                                   placeholder="10.00"
+                                                   value="<?php echo htmlspecialchars($r['comprimento']); ?>" required>
+                                            <span class="input-suffix">m</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" id="btn-add-room" class="btn-add-room">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                            Adicionar Comodo
+                        </button>
+                        <small class="form-hint">O sistema identifica o maior lado como comprimento dos trilhos em cada comodo.</small>
 
                         <!-- SECAO ENCHIMENTO -->
                         <div class="form-group" style="margin-top:1rem;">
@@ -277,11 +352,11 @@
                     <h4>Formulas utilizadas</h4>
                     <div class="formula-item">
                         <span class="formula-label fl-trilho">Trilhos</span>
-                        <code><?php echo number_format($comprimento_calc, 2, ',', '.'); ?> / 0,43 = <strong><?php echo $qtd_trilhos; ?></strong></code>
+                        <code>soma de (maior_lado / 0,43) por comodo = <strong><?php echo $qtd_trilhos; ?></strong></code>
                     </div>
                     <div class="formula-item">
                         <span class="formula-label <?php echo ($enchimento === 'tijolo') ? 'fl-tijolo' : 'fl-isopor'; ?>"><?php echo ($enchimento === 'tijolo') ? 'Tijolo' : 'Isopor'; ?></span>
-                        <code>(<?php echo number_format($largura_calc, 2, ',', '.'); ?> &times; <?php echo number_format($comprimento_calc, 2, ',', '.'); ?>) &times; <?php echo number_format($fator_enchimento, ($enchimento === 'tijolo' ? 0 : 1), ',', '.'); ?> = <?php echo number_format($area * $fator_enchimento, 1, ',', '.'); ?> &asymp; <strong><?php echo $qtd_enchimento; ?> <?php echo $unidade_enchimento; ?></strong></code>
+                        <code>area total <?php echo number_format($area, 2, ',', '.'); ?> m&sup2; &times; <?php echo number_format($fator_enchimento, ($enchimento === 'tijolo' ? 0 : 1), ',', '.'); ?> = <strong><?php echo $qtd_enchimento; ?> <?php echo $unidade_enchimento; ?></strong></code>
                     </div>
                     <?php if ($usar_tela): ?>
                     <div class="formula-item">
@@ -317,9 +392,49 @@
                     <div class="result-card rc-area rc-full">
                         <span class="rc-value"><?php echo number_format($area, 2, ',', '.'); ?></span>
                         <span class="rc-unit">m&sup2;</span>
-                        <span class="rc-label">Area Total do Vao</span>
+                        <span class="rc-label">Area Total (<?php echo count($rooms); ?> <?php echo count($rooms) > 1 ? 'comodos' : 'comodo'; ?>)</span>
                     </div>
                 </div>
+
+                <!-- Breakdown por Cômodo -->
+                <?php if (count($rooms) > 1): ?>
+                <div class="result-section-title">Detalhamento por Comodo</div>
+                <div class="rooms-table-wrapper">
+                    <table class="rooms-table">
+                        <thead>
+                            <tr>
+                                <th>Comodo</th>
+                                <th>Larg. x Comp.</th>
+                                <th>Area</th>
+                                <th>Trilhos</th>
+                                <th><?php echo $unidade_enchimento; ?></th>
+                                <th>Peso</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($rooms as $r): ?>
+                            <tr>
+                                <td><strong><?php echo htmlspecialchars($r['nome']); ?></strong></td>
+                                <td><?php echo number_format($r['largura'], 2, ',', '.'); ?> &times; <?php echo number_format($r['comprimento'], 2, ',', '.'); ?> m</td>
+                                <td><?php echo number_format($r['area'], 2, ',', '.'); ?> m&sup2;</td>
+                                <td><?php echo $r['trilhos']; ?></td>
+                                <td><?php echo $r['enchimento']; ?></td>
+                                <td><?php echo number_format($r['peso'], 0, ',', '.'); ?> kg</td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="2"><strong>TOTAL</strong></td>
+                                <td><strong><?php echo number_format($area, 2, ',', '.'); ?> m&sup2;</strong></td>
+                                <td><strong><?php echo $qtd_trilhos; ?></strong></td>
+                                <td><strong><?php echo $qtd_enchimento; ?></strong></td>
+                                <td><strong><?php echo number_format($peso_enchimento, 0, ',', '.'); ?> kg</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <?php endif; ?>
 
                 <!-- Trilhos + Enchimento -->
                 <div class="result-section-title">Estrutura da Laje</div>
@@ -401,8 +516,8 @@
 
                 <div class="result-detail">
                     <table>
-                        <tr><td>Comprimento (maior lado)</td><td><strong><?php echo number_format($comprimento_calc, 2, ',', '.'); ?> m</strong></td></tr>
-                        <tr><td>Largura (menor lado)</td><td><strong><?php echo number_format($largura_calc, 2, ',', '.'); ?> m</strong></td></tr>
+                        <tr><td>Numero de comodos</td><td><strong><?php echo count($rooms); ?></strong></td></tr>
+                        <tr><td>Area total</td><td><strong><?php echo number_format($area, 2, ',', '.'); ?> m&sup2;</strong></td></tr>
                         <tr><td>Espacamento entre trilhos</td><td><strong>0,43 m</strong></td></tr>
                         <?php if ($usar_tela): ?>
                         <tr><td>Area da tela (<?php echo $tela_info['nome']; ?>)</td><td><strong><?php echo number_format($area_tela, 2, ',', '.'); ?> m&sup2;</strong></td></tr>
@@ -412,6 +527,13 @@
                         <?php endif; ?>
                     </table>
                 </div>
+
+                <button type="button" id="btn-download-pdf" class="btn-download">
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM10 2a1 1 0 011 1v8.586l2.293-2.293a1 1 0 011.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 11.586V3a1 1 0 011-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Baixar Orcamento (PDF)
+                </button>
 
                 <div class="result-tip">
                     <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
@@ -443,6 +565,18 @@
 
             <div class="viz-panel" id="panel-2d">
                 <div class="card card-viz">
+                    <?php if (count($rooms) > 1): ?>
+                    <div class="form-group" style="max-width:300px;">
+                        <label for="room-selector">Visualizar comodo:</label>
+                        <div class="select-wrapper">
+                            <select id="room-selector">
+                                <?php foreach ($rooms as $i => $r): ?>
+                                <option value="<?php echo $i; ?>"><?php echo htmlspecialchars($r['nome']); ?> (<?php echo number_format($r['largura'], 2, ',', '.'); ?> &times; <?php echo number_format($r['comprimento'], 2, ',', '.'); ?> m)</option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <div class="viz-legend">
                         <div class="legend-item">
                             <span class="legend-color" style="background:#78909c;"></span>
@@ -494,16 +628,27 @@
 
         <script>
             var LAJE_DATA = {
+                rooms: <?php echo json_encode($rooms); ?>,
+                projeto: <?php echo json_encode($projeto_nome); ?>,
+                cliente: <?php echo json_encode($cliente_nome); ?>,
                 comprimento: <?php echo $comprimento_calc; ?>,
                 largura: <?php echo $largura_calc; ?>,
-                trilhos: <?php echo $qtd_trilhos; ?>,
-                isopor: <?php echo $qtd_enchimento; ?>,
+                trilhos: <?php echo $rooms[0]['trilhos']; ?>,
+                isopor: <?php echo $rooms[0]['enchimento']; ?>,
                 enchimento: '<?php echo $enchimento; ?>',
+                nome_enchimento: <?php echo json_encode($nome_enchimento); ?>,
+                unidade_enchimento: <?php echo json_encode($unidade_enchimento); ?>,
+                area_total: <?php echo $area; ?>,
+                total_trilhos: <?php echo $qtd_trilhos; ?>,
+                total_enchimento: <?php echo $qtd_enchimento; ?>,
+                peso_total: <?php echo $peso_enchimento; ?>,
                 espacamento: 0.43,
-                tela: { qtd: <?php echo $qtd_tela; ?>, larg: <?php echo $tela_info['larg']; ?>, comp: <?php echo $tela_info['comp']; ?>, nome: '<?php echo $tela_info['nome']; ?>' },
-                malha: { qtd: <?php echo $qtd_malha; ?>, larg: <?php echo $malha_info['larg']; ?>, comp: <?php echo $malha_info['comp']; ?>, nome: '<?php echo $malha_info['nome']; ?>' }
+                tela: <?php echo $usar_tela ? json_encode(['ativo' => true, 'qtd' => $qtd_tela_sem, 'qtd_margem' => $qtd_tela_com, 'larg' => $tela_info['larg'], 'comp' => $tela_info['comp'], 'nome' => $tela_info['nome'], 'desc' => $tela_info['desc'], 'complemento' => $complemento_tela_sem]) : '{ "ativo": false }'; ?>,
+                malha: <?php echo $usar_malha ? json_encode(['ativo' => true, 'qtd' => $qtd_malha, 'larg' => $malha_info['larg'], 'comp' => $malha_info['comp'], 'nome' => $malha_info['nome'], 'desc' => $malha_info['desc']]) : '{ "ativo": false }'; ?>
             };
         </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
         <?php endif; ?>
 
         <?php if (!$calculado): ?>
@@ -511,18 +656,18 @@
             <div class="info-grid">
                 <div class="info-step">
                     <div class="step-num">1</div>
-                    <strong>Informe as medidas</strong>
-                    <p>Digite comprimento e largura do vao em metros.</p>
+                    <strong>Adicione comodos</strong>
+                    <p>Informe largura e comprimento de cada comodo do projeto.</p>
                 </div>
                 <div class="info-step">
                     <div class="step-num">2</div>
-                    <strong>Escolha tela e malha</strong>
-                    <p>Selecione os modelos de tela de aco e malha POP.</p>
+                    <strong>Escolha materiais</strong>
+                    <p>Isopor ou tijolo, e opcionalmente tela e malha POP.</p>
                 </div>
                 <div class="info-step">
                     <div class="step-num">3</div>
-                    <strong>Veja o resultado</strong>
-                    <p>Trilhos, isopor, tela, malha e visualizacao 2D/3D.</p>
+                    <strong>Baixe o orcamento</strong>
+                    <p>Tabela por comodo, totais e PDF para impressao.</p>
                 </div>
             </div>
         </div>

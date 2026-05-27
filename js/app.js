@@ -30,15 +30,92 @@ document.addEventListener('DOMContentLoaded', function () {
     setupToggle('usar_tela', 'secao-tela');
     setupToggle('usar_malha', 'secao-malha');
 
+    // ── Gerenciamento de Cômodos ──
+    var roomsContainer = document.getElementById('rooms-container');
+    var btnAddRoom = document.getElementById('btn-add-room');
+
+    function reindexRooms() {
+        if (!roomsContainer) return;
+        var rows = roomsContainer.querySelectorAll('.room-row');
+        rows.forEach(function (row, i) {
+            row.setAttribute('data-room-index', i);
+            row.querySelector('.room-number').textContent = 'Comodo ' + (i + 1);
+            row.querySelectorAll('input').forEach(function (input) {
+                var n = input.getAttribute('name');
+                if (n) {
+                    input.setAttribute('name', n.replace(/rooms\[\d+\]/, 'rooms[' + i + ']'));
+                }
+            });
+        });
+    }
+
+    function attachRemoveHandler(btn) {
+        btn.addEventListener('click', function () {
+            var rows = roomsContainer.querySelectorAll('.room-row');
+            if (rows.length <= 1) {
+                alert('O projeto precisa de pelo menos 1 comodo.');
+                return;
+            }
+            btn.closest('.room-row').remove();
+            reindexRooms();
+        });
+    }
+
+    if (roomsContainer) {
+        roomsContainer.querySelectorAll('.room-remove').forEach(attachRemoveHandler);
+    }
+
+    if (btnAddRoom && roomsContainer) {
+        btnAddRoom.addEventListener('click', function () {
+            var i = roomsContainer.querySelectorAll('.room-row').length;
+            var div = document.createElement('div');
+            div.className = 'room-row';
+            div.setAttribute('data-room-index', i);
+            div.innerHTML =
+                '<div class="room-row-header">' +
+                    '<span class="room-number">Comodo ' + (i + 1) + '</span>' +
+                    '<button type="button" class="room-remove" title="Remover">&times;</button>' +
+                '</div>' +
+                '<div class="room-row-fields">' +
+                    '<div class="form-group">' +
+                        '<label>Nome <small style="font-weight:400; color:#888;">(opcional)</small></label>' +
+                        '<input type="text" name="rooms[' + i + '][nome]" placeholder="Ex: Sala">' +
+                    '</div>' +
+                    '<div class="form-group">' +
+                        '<label>Largura</label>' +
+                        '<div class="input-wrapper">' +
+                            '<input type="number" name="rooms[' + i + '][largura]" step="0.01" min="0.01" placeholder="6.00" required>' +
+                            '<span class="input-suffix">m</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="form-group">' +
+                        '<label>Comprimento</label>' +
+                        '<div class="input-wrapper">' +
+                            '<input type="number" name="rooms[' + i + '][comprimento]" step="0.01" min="0.01" placeholder="10.00" required>' +
+                            '<span class="input-suffix">m</span>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            roomsContainer.appendChild(div);
+            attachRemoveHandler(div.querySelector('.room-remove'));
+        });
+    }
+
     // ── Validacao ──
     var form = document.getElementById('calculatorForm');
     if (form) {
         form.addEventListener('submit', function (e) {
-            var c = parseFloat(document.getElementById('comprimento').value);
-            var l = parseFloat(document.getElementById('largura').value);
-            if (isNaN(c) || isNaN(l) || c <= 0 || l <= 0) {
+            var rows = roomsContainer ? roomsContainer.querySelectorAll('.room-row') : [];
+            var hasValid = false;
+            rows.forEach(function (row) {
+                var inputs = row.querySelectorAll('input[type="number"]');
+                var larg = parseFloat(inputs[0].value);
+                var comp = parseFloat(inputs[1].value);
+                if (!isNaN(larg) && !isNaN(comp) && larg > 0 && comp > 0) hasValid = true;
+            });
+            if (!hasValid) {
                 e.preventDefault();
-                alert('Preencha todos os campos com valores validos.');
+                alert('Preencha pelo menos um comodo com largura e comprimento validos.');
             }
         });
     }
@@ -423,6 +500,190 @@ document.addEventListener('DOMContentLoaded', function () {
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.06)';
         ctx.stroke();
+    }
+
+    // ============================
+    // SELETOR DE CÔMODO PARA VISUALIZAÇÃO
+    // ============================
+    var roomSelector = document.getElementById('room-selector');
+    if (roomSelector && data.rooms) {
+        roomSelector.addEventListener('change', function () {
+            var i = parseInt(roomSelector.value);
+            var r = data.rooms[i];
+            if (!r) return;
+            data.comprimento = r.comprimento;
+            data.largura = r.largura;
+            data.trilhos = r.trilhos;
+            data.isopor = r.enchimento;
+            draw2D();
+            var panel3d = document.getElementById('panel-3d');
+            if (panel3d && !panel3d.classList.contains('hidden')) draw3D();
+        });
+    }
+
+    // ============================
+    // DOWNLOAD DE ORÇAMENTO PDF
+    // ============================
+    var btnPdf = document.getElementById('btn-download-pdf');
+    if (btnPdf) {
+        btnPdf.addEventListener('click', function () {
+            generateBudgetPDF();
+        });
+    }
+
+    function generateBudgetPDF() {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('Biblioteca de PDF nao carregada. Verifique sua conexao.');
+            return;
+        }
+        var jsPDFCtor = window.jspdf.jsPDF;
+        var doc = new jsPDFCtor({ unit: 'mm', format: 'a4' });
+        var pageW = doc.internal.pageSize.getWidth();
+        var marginX = 14;
+        var y = 18;
+
+        // Cabeçalho
+        doc.setFillColor(13, 148, 136);
+        doc.rect(0, 0, pageW, 28, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(20);
+        doc.text('PREMOLDACO', marginX, 14);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text('Orcamento de Materiais para Laje Premoldada', marginX, 21);
+        var hoje = new Date();
+        var dataStr = String(hoje.getDate()).padStart(2, '0') + '/' +
+                      String(hoje.getMonth() + 1).padStart(2, '0') + '/' +
+                      hoje.getFullYear();
+        doc.text(dataStr, pageW - marginX, 14, { align: 'right' });
+
+        y = 38;
+        doc.setTextColor(30, 41, 59);
+
+        // Identificação
+        if (data.projeto || data.cliente) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            if (data.projeto) {
+                doc.text('Projeto: ', marginX, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(data.projeto, marginX + 18, y);
+                y += 6;
+            }
+            if (data.cliente) {
+                doc.setFont('helvetica', 'bold');
+                doc.text('Cliente: ', marginX, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(data.cliente, marginX + 18, y);
+                y += 6;
+            }
+            y += 2;
+        }
+
+        // Resumo geral
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(13, 148, 136);
+        doc.text('Resumo do Projeto', marginX, y);
+        y += 6;
+        doc.setTextColor(30, 41, 59);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Numero de comodos: ' + data.rooms.length, marginX, y); y += 5;
+        doc.text('Area total: ' + data.area_total.toFixed(2).replace('.', ',') + ' m2', marginX, y); y += 5;
+        doc.text('Material de enchimento: ' + data.nome_enchimento, marginX, y); y += 5;
+        doc.text('Peso total estimado: ' + Math.round(data.peso_total).toLocaleString('pt-BR') + ' kg', marginX, y); y += 8;
+
+        // Tabela por cômodo
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(13, 148, 136);
+        doc.text('Detalhamento por Comodo', marginX, y);
+        y += 4;
+        doc.setTextColor(30, 41, 59);
+
+        var roomRows = data.rooms.map(function (r) {
+            return [
+                r.nome,
+                r.largura.toFixed(2).replace('.', ',') + ' x ' + r.comprimento.toFixed(2).replace('.', ',') + ' m',
+                r.area.toFixed(2).replace('.', ',') + ' m2',
+                String(r.trilhos),
+                r.enchimento + ' ' + data.unidade_enchimento,
+                Math.round(r.peso).toLocaleString('pt-BR') + ' kg'
+            ];
+        });
+        doc.autoTable({
+            startY: y,
+            head: [['Comodo', 'Dimensoes', 'Area', 'Trilhos', data.nome_enchimento, 'Peso']],
+            body: roomRows,
+            foot: [[
+                'TOTAL',
+                '',
+                data.area_total.toFixed(2).replace('.', ',') + ' m2',
+                String(data.total_trilhos),
+                data.total_enchimento + ' ' + data.unidade_enchimento,
+                Math.round(data.peso_total).toLocaleString('pt-BR') + ' kg'
+            ]],
+            styles: { fontSize: 9, cellPadding: 2 },
+            headStyles: { fillColor: [13, 148, 136], textColor: 255 },
+            footStyles: { fillColor: [241, 245, 249], textColor: [13, 148, 136], fontStyle: 'bold' },
+            margin: { left: marginX, right: marginX }
+        });
+        y = doc.lastAutoTable.finalY + 8;
+
+        // Materiais totais
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(13, 148, 136);
+        doc.text('Lista de Materiais', marginX, y);
+        y += 4;
+        doc.setTextColor(30, 41, 59);
+
+        var materiais = [
+            ['Trilhos (vigotas) - espacamento 0,43m', String(data.total_trilhos) + ' un'],
+            [data.nome_enchimento, data.total_enchimento + ' ' + data.unidade_enchimento]
+        ];
+        if (data.tela.ativo) {
+            var telaLinha = data.tela.qtd + ' telas (' + data.tela.qtd_margem + ' com +10% margem)';
+            if (data.tela.complemento > 0) telaLinha += ' + ' + data.tela.complemento + ' Malha POP complemento';
+            materiais.push([data.tela.nome + ' - ' + data.tela.desc, telaLinha]);
+        }
+        if (data.malha.ativo) {
+            materiais.push([data.malha.nome + ' - ' + data.malha.desc + ' (+20% incluso)', data.malha.qtd + ' pecas']);
+        }
+        doc.autoTable({
+            startY: y,
+            head: [['Material', 'Quantidade']],
+            body: materiais,
+            styles: { fontSize: 10, cellPadding: 3 },
+            headStyles: { fillColor: [13, 148, 136], textColor: 255 },
+            margin: { left: marginX, right: marginX },
+            columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+        });
+        y = doc.lastAutoTable.finalY + 10;
+
+        // Observações
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.setFont('helvetica', 'italic');
+        var obs = 'Os calculos sao estimativas baseadas em dimensoes informadas. ' +
+                  'Recomenda-se margem de 10% para perdas em trilhos e enchimento. ' +
+                  'Tela ja inclui +10% e Malha POP +20% para emendas. ' +
+                  'Consulte sempre um engenheiro estrutural antes da execucao.';
+        var obsLines = doc.splitTextToSize(obs, pageW - marginX * 2);
+        doc.text(obsLines, marginX, y);
+
+        // Rodapé
+        var pageH = doc.internal.pageSize.getHeight();
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text('Premoldaco - Calculadora de Laje Premoldada', marginX, pageH - 8);
+        doc.text('Gerado em ' + dataStr, pageW - marginX, pageH - 8, { align: 'right' });
+
+        var filename = 'orcamento-laje-' + (data.projeto || 'projeto').replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-' + hoje.getTime() + '.pdf';
+        doc.save(filename);
     }
 
 });

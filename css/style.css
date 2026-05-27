@@ -218,6 +218,60 @@ body {
     transition: .2s ease;
 }
 .btn-calculate:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(245,158,11,.45); }
+
+/* ── Multi-cômodos ── */
+#rooms-container { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.room-row {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm);
+    padding: 12px; transition: .2s;
+}
+.room-row:hover { border-color: #cbd5e1; }
+.room-row-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.room-number { font-weight: 700; font-size: .85rem; color: var(--primary); }
+.room-remove {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fee2e2; color: #dc2626; border: none; cursor: pointer;
+    font-size: 1.1rem; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: .15s;
+}
+.room-remove:hover { background: #dc2626; color: #fff; transform: scale(1.05); }
+.room-row-fields { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; }
+@media (max-width: 600px) {
+    .room-row-fields { grid-template-columns: 1fr; }
+}
+.btn-add-room {
+    margin-top: 10px; width: 100%; padding: 10px;
+    background: #f1f5f9; color: var(--primary); border: 2px dashed #cbd5e1;
+    border-radius: var(--radius-sm); font-weight: 600; font-family: inherit; font-size: .92rem;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: .15s;
+}
+.btn-add-room:hover { background: #e2e8f0; border-color: var(--primary); }
+
+/* Tabela por cômodo */
+.rooms-table-wrapper { padding: 0 22px 8px; overflow-x: auto; }
+.rooms-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.rooms-table th, .rooms-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+.rooms-table thead th { background: #f1f5f9; color: var(--primary); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .3px; }
+.rooms-table tfoot td { background: #ecfdf5; color: var(--primary); border-top: 2px solid var(--success); }
+.rooms-table tbody tr:hover { background: #f8fafc; }
+
+/* Botão download */
+.btn-download {
+    margin: 12px 22px 22px; padding: 13px 18px;
+    background: linear-gradient(135deg, #0d9488, #0f766e);
+    color: #fff; border: none; border-radius: var(--radius-sm);
+    font-size: .95rem; font-weight: 700; font-family: inherit;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 4px 14px rgba(13,148,136,.35);
+    transition: .2s ease;
+    width: calc(100% - 44px);
+}
+.btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(13,148,136,.45); }
+.btn-download:active { transform: translateY(0); }
 .btn-calculate:active { transform: translateY(0); }
 
 /* ── Formula Box ── */
